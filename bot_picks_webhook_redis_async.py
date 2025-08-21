@@ -42,9 +42,19 @@ async def get_redis() -> redis.Redis:
     if rdb is None:
         if not REDIS_URL:
             raise RuntimeError("Falta REDIS_URL")
-        rdb = redis.from_url(REDIS_URL, encoding="utf-8", decode_responses=True)
+        params = dict(
+            encoding="utf-8",
+            decode_responses=True,
+            socket_connect_timeout=5,  # corta conexiones colgadas
+            socket_timeout=8,
+            health_check_interval=30,
+            retry_on_timeout=True,
+        )
+        # Fuerza TLS “amigable” si viene con rediss://
+        if REDIS_URL.startswith("rediss://"):
+            params.update(ssl=True, ssl_cert_reqs=None)
+        rdb = redis.from_url(REDIS_URL, **params)
     return rdb
-
 # ---------- Models ----------
 @dataclass
 class OutcomePrice:
