@@ -105,19 +105,24 @@ def pick_fingerprint(date_str: str, league: str, home: str, away: str, side: str
     raw = f"{dpart}|{league.lower()}|{home.lower()}|{away.lower()}|1x2|{side.lower()}"
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
-async def decide_backend():
+async def mem_exists(user_id: int, fp: str) -> bool:
     global _backend
-    if REDIS_BACKEND in ("resp","rest"):
-        _backend = REDIS_BACKEND
-        return
-    try:
-        await get_redis_resp()
-        _backend = "resp"
-    except Exception as e:
-        if REDIS_REST_URL and REDIS_REST_TOKEN:
-            _backend = "rest"
-        else:
-            raise RuntimeError("No se pudo usar Redis RESP y no hay credenciales REST (REDIS_REST_URL/TOKEN)")
+    key = mem_key(user_id, fp)
+    if _backend is None:
+        await decide_backend()
+    if _backend == "resp":
+        r = await get_redis_resp()
+        try:
+            return (await r.exists(key)) == 1
+        except Exception:
+            # fallback a REST si está configurado
+            if REDIS_REST_URL and REDIS_REST_TOKEN:
+                _backend = "rest"
+            else:
+                raise
+    if _backend == "rest":
+        return await rest_exists(key)
+    raise RuntimeError("Backend de memoria no inicializado")
 
 async def mem_exists(user_id: int, fp: str) -> bool:
     key = mem_key(user_id, fp)
