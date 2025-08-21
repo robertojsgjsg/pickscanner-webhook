@@ -105,25 +105,6 @@ def pick_fingerprint(date_str: str, league: str, home: str, away: str, side: str
     raw = f"{dpart}|{league.lower()}|{home.lower()}|{away.lower()}|1x2|{side.lower()}"
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
-async def mem_exists(user_id: int, fp: str) -> bool:
-    global _backend
-    key = mem_key(user_id, fp)
-    if _backend is None:
-        await decide_backend()
-    if _backend == "resp":
-        r = await get_redis_resp()
-        try:
-            return (await r.exists(key)) == 1
-        except Exception:
-            # fallback a REST si está configurado
-            if REDIS_REST_URL and REDIS_REST_TOKEN:
-                _backend = "rest"
-            else:
-                raise
-    if _backend == "rest":
-        return await rest_exists(key)
-    raise RuntimeError("Backend de memoria no inicializado")
-
 # ---------- Memoria (REST puro, sin _backend) ----------
 async def mem_exists(user_id: int, fp: str) -> bool:
     key = mem_key(user_id, fp)
@@ -431,6 +412,21 @@ async def week_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
             lines.append(f"ℹ️ Omitidos {skipped} repetidos.")
         await update.message.reply_text("\n\n".join(lines))
 
+# --- Memoria por REST: respuestas simples ---
+async def meminfo_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.effective_message.reply_text(
+        f"🧠 Memoria activa por REST.\n"
+        f"No hay resumen detallado (limitación Upstash REST).\n"
+        f"TTL actual: {MEMORY_TTL_DAYS} días."
+    )
+
+async def forgetall_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.effective_message.reply_text(
+        "🧹 Borrado masivo no disponible en REST.\n"
+        "Sugerencias: reduce el TTL o cambia a RESP si quieres listar/borrar."
+    )
+
+
 # Utilidades
 DATE_PAT = re.compile(r"^\s*(\d{1,2})[/-](\d{1,2})[/-](\d{2}|\d{4})\s*$")
 def parse_local_date(text: str) -> Optional[dt.date]:
@@ -464,8 +460,9 @@ def main():
     app.add_handler(CommandHandler("tomorrow", tomorrow_cmd))
     app.add_handler(CommandHandler("day", day_cmd))
     app.add_handler(CommandHandler("week", week_cmd))
-    app.add_handler(CommandHandler("meminfo", lambda u,c: u.effective_message.reply_text("🧠 Memoria: usa RESP para ver resumen.")))
-    app.add_handler(CommandHandler("forgetall", lambda u,c: u.effective_message.reply_text("🧹 Borrado masivo: usa RESP.")))
+    app.add_handler(CommandHandler("meminfo", meminfo_cmd))
+    app.add_handler(CommandHandler("forgetall", forgetall_cmd))
+
     app.add_error_handler(on_error)
 
     url_path = TELEGRAM_BOT_TOKEN
