@@ -186,26 +186,29 @@ def parse_matches(sport_key: str, data: List[dict]) -> List[Match]:
         prices: List[OutcomePrice] = []
         for bm in ev.get("bookmakers", []):
             bname = bm.get("title", bm.get("key", "book"))
-            o_book = {"1":None, "X":None, "2":None}
+            o_book = {"1": None, "X": None, "2": None}
             for mk in bm.get("markets", []):
-                if mk.get("key") != "h2h": continue
-                for oc in mk in bm.get("markets", []):
-                    if mk.get("key") != "h2h": continue
+                if mk.get("key") != "h2h":
+                    continue
                 for oc in mk.get("outcomes", []):
                     name = (oc.get("name") or "").lower()
                     price = oc.get("price", None)
-                    if not price or price <= 1: continue
-                    if name == ev["home_team"].lower():
+                    if not price or price <= 1:
+                        continue
+                    home = ev["home_team"].lower()
+                    away = ev["away_team"].lower()
+                    if name == home:
                         o_book["1"] = max(o_book["1"] or 0, float(price))
-                    elif name == ev["away_team"].lower():
+                    elif name == away:
                         o_book["2"] = max(o_book["2"] or 0, float(price))
-                    elif name in ("draw","empate","x"):
+                    elif name in ("draw", "empate", "x"):
                         o_book["X"] = max(o_book["X"] or 0, float(price))
             for side, pr in o_book.items():
-                if pr: prices.append(OutcomePrice(bname, side, pr))
+                if pr:
+                    prices.append(OutcomePrice(bname, side, pr))
         out.append(Match(
             sport_key=sport_key,
-            league=sport_key.replace("soccer_","").replace("_"," ").title(),
+            league=sport_key.replace("soccer_", "").replace("_", " ").title(),
             commence_time=ev["commence_time"],
             home=ev["home_team"],
             away=ev["away_team"],
