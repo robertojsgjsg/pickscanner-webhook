@@ -66,7 +66,7 @@ async def get_redis_resp() -> redis.Redis:
             raise
     return rdb
 
-# ---------- Redis REST (Upstash) ----------
+# ---------- Upstash REST helpers ----------
 def rest_url(path: str) -> str:
     base = REDIS_REST_URL.rstrip("/")
     if not base:
@@ -124,44 +124,24 @@ async def mem_exists(user_id: int, fp: str) -> bool:
         return await rest_exists(key)
     raise RuntimeError("Backend de memoria no inicializado")
 
+# ---------- Memoria (REST puro, sin _backend) ----------
 async def mem_exists(user_id: int, fp: str) -> bool:
     key = mem_key(user_id, fp)
-    if _backend is None:
-        await decide_backend()
-    if _backend == "resp":
-        r = await get_redis_resp()
-        try:
-            return (await r.exists(key)) == 1
-        except Exception:
-            if REDIS_REST_URL and REDIS_REST_TOKEN:
-                _backend = "rest"
-            else:
-                raise
-    if _backend == "rest":
-        return await rest_exists(key)
-    raise RuntimeError("Backend de memoria no inicializado")
+    url = rest_url(f"exists/{urllib.parse.quote(key, safe='')}")
+    async with httpx.AsyncClient(timeout=HTTP_TIMEOUT) as client:
+        r = await client.get(url, headers=rest_headers())
+        r.raise_for_status()
+        data = r.json()
+        return (data.get("result", 0) == 1)
 
 async def mem_setex(user_id: int, fp: str, meta: dict, ttl_days: int):
-    global _backend
     key = mem_key(user_id, fp)
     ttl = ttl_days * 24 * 3600
-    value = json.dumps(meta)
-    if _backend is None:
-        await decide_backend()
-    if _backend == "resp":
-        r = await get_redis_resp()
-        try:
-            await r.set(key, value, ex=ttl)
-            return
-        except Exception:
-            if REDIS_REST_URL and REDIS_REST_TOKEN:
-                _backend = "rest"
-            else:
-                raise
-    if _backend == "rest":
-        await rest_setex(key, ttl, value)
-        return
-    raise RuntimeError("Backend de memoria no inicializado")
+    val = urllib.parse.quote(json.dumps(meta), safe='')
+    url = rest_url(f"setex/{urllib.parse.quote(key, safe='')}/{ttl}/{val}")
+    async with httpx.AsyncClient(timeout=HTTP_TIMEOUT) as client:
+        r = await client.get(url, headers=rest_headers())
+        r.raise_for_status()
 
 # ---------- Odds (async) ----------
 async def fetch_h2h_odds_async(client: httpx.AsyncClient, sport_key: str) -> List[dict]:
