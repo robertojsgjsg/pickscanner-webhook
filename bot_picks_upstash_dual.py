@@ -142,6 +142,7 @@ async def mem_exists(user_id: int, fp: str) -> bool:
     raise RuntimeError("Backend de memoria no inicializado")
 
 async def mem_setex(user_id: int, fp: str, meta: dict, ttl_days: int):
+    global _backend
     key = mem_key(user_id, fp)
     ttl = ttl_days * 24 * 3600
     value = json.dumps(meta)
