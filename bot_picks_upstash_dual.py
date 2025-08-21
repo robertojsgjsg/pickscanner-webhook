@@ -39,33 +39,6 @@ HTTP_CONCURRENCY = int(os.getenv("HTTP_CONCURRENCY", "5"))
 http_limits = httpx.Limits(max_connections=HTTP_CONCURRENCY, max_keepalive_connections=HTTP_CONCURRENCY)
 http_client = httpx.AsyncClient(limits=http_limits, timeout=HTTP_TIMEOUT)
 
-# ---------- Redis RESP (async) ----------
-rdb: Optional[redis.Redis] = None
-async def get_redis_resp() -> redis.Redis:
-    global rdb
-    if rdb is None:
-        if not REDIS_URL:
-            raise RuntimeError("Falta REDIS_URL (rediss://...)")
-        params = dict(
-            encoding="utf-8",
-            decode_responses=True,
-            socket_connect_timeout=5,
-            socket_timeout=8,
-            health_check_interval=30,
-            retry_on_timeout=True,
-        )
-        if REDIS_URL.startswith("rediss://"):
-            params.update(ssl=True, ssl_cert_reqs=None)
-        rdb = redis.from_url(REDIS_URL, **params)
-        try:
-            ok = await rdb.ping()
-            if not ok:
-                raise RuntimeError("PING a Redis RESP falló")
-        except Exception as e:
-            rdb = None
-            raise
-    return rdb
-
 # ---------- Upstash REST helpers ----------
 def rest_url(path: str) -> str:
     base = REDIS_REST_URL.rstrip("/")
@@ -91,7 +64,6 @@ async def rest_setex(key: str, ttl_sec: int, value: str) -> None:
     r.raise_for_status()
 
 # ---------- Memory facade (auto backend) ----------
-_backend: Optional[str] = None  # 'resp' or 'rest'
 
 def mem_key(user_id: int, fp: str) -> str:
     return f"{MEM_NAMESPACE}:u{user_id}:{fp}"
