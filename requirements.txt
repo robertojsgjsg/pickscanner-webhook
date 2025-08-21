@@ -1,3 +1,0 @@
-python-telegram-bot[webhooks]>=21.0,<22.0
-redis>=5.0.0
-httpx>=0.26.0
